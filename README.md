@@ -44,7 +44,7 @@ For reference, following is the hardware-only capacity (as opposed to hybrid har
 ### Integration
 While this very demo is put together to get one to quickly assess the solution and judge its cost-effectiveness, what's truly required to run it in your project is to
 1. Launch an Amazon EC2 VT1 Instance; alternatively get yourself a server with an Alveo U30 accelerator installed
-2. [Install](https://xilinx.github.io/video-sdk/v1.5/getting_started_on_vt1.html#id4) the Xilinx Video SDK; alternatively just start a `Xilinx Video SDK` AMI on EC2
+2. [Install](https://xilinx.github.io/video-sdk/v1.5/getting_started_on_vt1.html#installing-the-sdk-on-an-existing-ami) the Xilinx Video SDK; alternatively just start a `Xilinx Video SDK` AMI on EC2
 3. Compile ffmpeg with `x264` (the binary included in the SDK only includes the `mpsoc_vcu_h264` [i.e. hardware] transcoder); a [script](util/compile_ffmpeg_ubuntu.sh) to compile it as such is included for convenience
 4. run a ffmpeg command similar to [this](util/ffmpeg-samples/transcode_1080p.sh); notice that some ABR renditions are transcoded on the FPGA (encoder `mpsoc_vcu_h264`)while others on the CPU (encoder `libx264`)
 
