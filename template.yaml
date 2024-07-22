@@ -1,0 +1,192 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Hybrid hardware/software transcoding for ABR
+
+Parameters:
+  Capacity:
+    Type: String
+    Description: "Select the desired capacity and configuration"
+    AllowedValues:
+      - "10  x 1080p30 -> 1080p30, 720p30, 480p30, 240p30, 160p30"    # 1;vt1.3xlarge
+      - "16  x 1080p30 -> 720p30, 480p30, 360p30, 240p30, 160p30"     # 2;vt1.3xlarge
+      - "20  x 720p30  -> 720p30, 480p30, 360p30, 240p30, 160p30"     # 2;vt1.3xlarge
+      - "20  x 1080p30 -> 1080p30, 720p30, 480p30, 240p30, 160p30"    # 1;vt1.6xlarge
+      - "32  x 1080p30 -> 720p30, 480p30, 360p30, 240p30, 160p30"     # 2;vt1.6xlarge
+      - "40  x 720p30  -> 720p30, 480p30, 360p30, 240p30, 160p30"     # 2;vt1.6xlarge
+      - "80  x 1080p30 -> 1080p30, 720p30, 480p30, 240p30, 160p30"    # 1;vt1.24xlarge
+      - "128 x 1080p30 -> 720p30, 480p30, 360p30, 240p30, 160p30"     # 2;vt1.24xlarge
+      - "160 x 720p30  -> 720p30, 480p30, 360p30, 240p30, 160p30"     # 2;vt1.24xlarge
+    Default: "10  x 1080p30 -> 1080p30, 720p30, 480p30, 240p30, 160p30"
+    ConstraintDescription: "Must be a valid capacity option."
+  AvailabilityZone:
+    Type: String
+    Description: "The AZ to launch your server in; note that not all AZs support VT instances"
+    Default: "us-east-1e"
+  AMIId:
+    Type: String
+    Description: "The Xilinx Video SDK AMI ID to use for the server; the default is valid for us-east-1"
+    Default: "ami-05a32ec5995f621d0"
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      RoleName: !Sub "${AWS::StackName}-LambdaExecutionRole"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: LambdaBasicExecution
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+  CapacityIndexFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          var response = require('cfn-response');
+          exports.handler = (event, context) => {
+            const capacityMapping = {
+                "10  x 1080p30 -> 1080p30, 720p30, 480p30, 240p30, 160p30": { Scenario: "1", InstanceType: "vt1.3xlarge" },
+                "16  x 1080p30 -> 720p30, 480p30, 360p30, 240p30, 160p30": { Scenario: "2", InstanceType: "vt1.3xlarge" },
+                "20  x 720p30  -> 720p30, 480p30, 360p30, 240p30, 160p30": { Scenario: "2", InstanceType: "vt1.3xlarge" },
+                "20  x 1080p30 -> 1080p30, 720p30, 480p30, 240p30, 160p30": { Scenario: "1", InstanceType: "vt1.6xlarge" },
+                "32  x 1080p30 -> 720p30, 480p30, 360p30, 240p30, 160p30": { Scenario: "2", InstanceType: "vt1.6xlarge" },
+                "40  x 720p30  -> 720p30, 480p30, 360p30, 240p30, 160p30": { Scenario: "2", InstanceType: "vt1.6xlarge" },
+                "80  x 1080p30 -> 1080p30, 720p30, 480p30, 240p30, 160p30": { Scenario: "1", InstanceType: "vt1.24xlarge" },
+                "128 x 1080p30 -> 720p30, 480p30, 360p30, 240p30, 160p30": { Scenario: "2", InstanceType: "vt1.24xlarge" },
+                "160 x 720p30  -> 720p30, 480p30, 360p30, 240p30, 160p30": { Scenario: "2", InstanceType: "vt1.24xlarge" }
+            };
+            const capacity = event.ResourceProperties.Capacity;
+            const result = capacityMapping[capacity] || { Scenario: "1", InstanceType: "vt1.3xlarge" };
+            response.send(event, context, response.SUCCESS, result);
+          };
+      Runtime: nodejs20.x
+
+  CapacityIndexFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CapacityIndexFunction
+      Action: lambda:InvokeFunction
+      Principal: cloudformation.amazonaws.com
+
+  CapacityIndex:
+    Type: Custom::LoadLambda
+    Properties:
+      ServiceToken: !GetAtt CapacityIndexFunction.Arn
+      Capacity: !Ref Capacity
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.107.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Join ['', [!Ref "AWS::StackName", "-VPC" ]]
+   
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    DependsOn: VPC
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.107.10.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Ref AvailabilityZone
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-Public
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-Public
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway  
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allows ssh, rtmp and http/s connections to host
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 1935
+          ToPort: 1935
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+
+  Server:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AMIId
+      InstanceType: !GetAtt CapacityIndex.InstanceType
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          wget https://lostshadow.s3.amazonaws.com/augmented-hardware-transcoding/startup.sh
+          chmod +x startup.sh
+          ./startup.sh ${CapacityIndex.Scenario}
+      Tags: 
+        - 
+          Key: "Name"
+          Value: !Sub "${AWS::StackName}-Server"
+
+Outputs:
+  IngressEndpoint:
+    Description: RTMP URL to publish to
+    Value: !Sub 
+      - rtmp://${publicIp}:1935/live/stream1
+      - { publicIp: !GetAtt Server.PublicIp }
+  DemoPlayerUrl:
+    Description: Demo Player URL
+    Value: !Sub 
+      - http://${publicIp}:8080/player.html?src=hls/stream1.m3u8
+      - { publicIp: !GetAtt Server.PublicIp }
