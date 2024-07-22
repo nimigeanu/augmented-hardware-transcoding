@@ -37,7 +37,7 @@ For reference, following is the hardware-only capacity (as opposed to hybrid har
 5. Hit the `Create` button. 
 6. Wait for the `Status` of your CloudFormation template to become `CREATE_COMPLETE`. Note that this may take **2-3 minutes** or more.
 7. Under `Outputs`, click the link under `DemoPlayerUrl`; keep waiting/refreshing until the page loads. This may take an additional **3-4 minutes** or more. It is normal at this stage for it to display a `The media could not be loaded...` error. 
-8. Publish your stream to the `IngressEndpoint` RTMP address. You can use [OBS](https://obsproject.com/1) or an alternative.
+8. Publish your stream to the `IngressEndpoint` RTMP address. You can use [OBS](https://obsproject.com/) or an alternative.
 9. Refresh the player in step 7, it should now play the ABR stream. Give it just **one more minute** if it doesn't yet. For convenience, the player has a quality selector.
 10. Publish and play more streams by replacing `stream1` with anything else on both the `IngressEndpoint` and `DemoPlayerUrl`. When capacity is reached, further RTMP broadcasts are rejected.
 
